@@ -87,9 +87,14 @@ The symptom selector captures:
 - Strip owner PII at submission — only clinical and dog data moves forward.
 - Display the Valtorta Response on the user's Ethos Dashboard: ranked conditions with SGS scores, urgency tier color coding, and Diagnostic Handshake narratives.
 
+**Deployment Context**
+
+- The UI will be built on the existing **wvere.com platform**, not WordPress. The current website will be rebuilt from scratch to support the diagnostic engine architecture and biometric authentication requirements.
+- A marketing company is contracted to handle design, branding, and general website content. Your technical team owns the diagnostic engine implementation, biometric sign-in (D-Scope), and security protocols.
+- Users access via a biometric login gate (D-Scope) before being directed to their personal Ethos Dashboard. This gate also prevents unauthorized bot access.
+
 **Open Questions**
 
-- Is this a standalone web app, or is it embedded in the existing WANDVERSE platform / WordPress site?
 - What does the Ethos Dashboard show beyond the current case response — is there case history, saved profiles for multiple dogs, trends over time?
 
 ---
@@ -128,7 +133,7 @@ The **three operations** Level 2 performs:
 
 1. **Statistical Math** — Runs the raw IDS weighting against the submitted symptoms (the Symptom Velocity Engine and all TDS formula components).
 2. **Valtorta Multipliers** — Applies the Genetic Surge (B_m) using breed data from the Level 3 Resource Library; calculates Sentry Brakes (Ss) by cross-referencing bio-data against symptoms.
-3. **Branded Response** — Generates the Diagnostic Handshake narrative for each top result and flags Logic Conflicts (e.g., an age-impossible match).
+3. **Branded Response & Validation** — Generates the Diagnostic Handshake narrative for each top result, flags Logic Conflicts (e.g., an age-impossible match), and runs a validation check against Merck Manual reference data to ensure the results are clinically plausible. If it does not passed it should be flagged.
 
 The sentry fields (appetite, energy, gums, stool) are the binary YES/NO stability markers captured in the form. These are the only "biometric" data in the system — there is no hardware sensor or biometric device component.
 
@@ -161,7 +166,7 @@ A modular, static repository of hardened CSV data assets. Level 3 holds no proce
 **Data assets stored here:**
 - Master IDS (Integrated Diagnostic System) — 397 conditions with symptom weights, breed risk flags, lethality levels, prevalence headwinds
 - Breed Bio table — breed-specific genetic risk data used to calculate Breed Surge (B_m)
-- Merck Manual reference data
+- Merck Manual reference data — cached periodically from the Merck API (updates X times per year) for specific categories (breeds, symptoms, drugs); used by Level 2 as a post-calculation validation check
 - Condition Tags
 
 **The Valtorta Logic Engine — Total Diagnostic Score (TDS) Formula**
@@ -223,6 +228,7 @@ Each result includes the condition name, SGS score, and a Diagnostic Handshake n
 - Who is responsible for validating that the symptom weights and condition classifications in the IDS are clinically accurate? Is there a licensed veterinarian involved in calibrating and signing off on the dataset?
 - The current Prevalence Headwinds penalize rare conditions to reduce noise. The Anomaly Mandate calls for surfacing unusual symptom combinations. These two directives are in tension. How should the engine resolve this — should rare conditions receive a boost when multiple primary symptoms align strongly, overriding the headwind?
 - Has any version of the IDS or scoring logic been implemented in code anywhere beyond the spreadsheet, or is the spreadsheet the current source of truth?
+- How many times per year will the Merck Manual data be pulled from their API and cached in Level 3? What specific categories and data points are needed from each pull?
 
 ---
 
@@ -252,7 +258,20 @@ A private, air-gapped long-term data archive and admin console — strictly sepa
 
 ---
 
-## Security Architecture
+## Future Capabilities (Post-MVP)
+
+### Multimodal Input Support
+
+While not part of the MVP, the system architecture should be designed to support multimodal inputs (images, videos, PDFs, etc.) in future iterations. The approach:
+
+- Users can upload images or videos of symptoms (e.g., a rash, wound, or physical condition)
+- A preprocessing layer extracts clinical features from the media and converts them to symptom text (via model analysis or third-party image recognition API)
+- The extracted symptom is fed into the standard mathematical formula as an additional input
+- This approach maintains full compatibility with the current deterministic scoring architecture
+
+This design principle allows multimodal features to be added without requiring system redesign or retraining.
+
+---
 
 The client's 'Sanctuary Protocol' / 'Augusta Standard' maps to GCP's VPC Service Controls framework. The high-level intent is sound — tiered isolation with progressively restricted access as data moves deeper. The implementation, however, raises operational concerns.
 
@@ -269,6 +288,18 @@ The client's 'Sanctuary Protocol' / 'Augusta Standard' maps to GCP's VPC Service
 - How do we deploy updates to the Level 2 AI agent or the Level 3 Resource Library data assets if engineering has no access? Is there a defined ops model for ongoing maintenance?
 - Is the 'air-gap' meant to be permanent (no engineer ever accesses production data) or can access be granted temporarily with audit logging, on a break-glass basis?
 - VPC Service Controls create 'logical' perimeters — data can still flow between projects with the right service account permissions. What is the client's definition of 'physically isolated'? We need to align on what this means technically.
+
+---
+
+## Cross-Cutting Concerns
+
+### Cost & Efficiency Strategy
+
+The architecture prioritizes cost efficiency through a closed-loop design:
+
+- **Deterministic scoring**: The mathematical formula handles the core diagnostic logic without repeated LLM calls. The LLM is used only to generate the Diagnostic Handshake narrative on top of the computed score.
+- **Caching**: Results are cached to avoid re-processing identical inputs, reducing token usage across repeated queries.
+- **Closed-loop data**: Most data is stored and cached locally in Level 3, minimizing API calls to external services (e.g., Merck Manual is pulled periodically, not queried on-demand).
 
 ---
 
